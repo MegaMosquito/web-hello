@@ -1,23 +1,34 @@
-#include <stdio.h> 
-#include <stdlib.h> 
-#include <errno.h> 
-#include <string.h> 
-#include <sys/types.h> 
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/types.h>
 #include <arpa/inet.h>
-#include <netinet/in.h> 
-#include <sys/socket.h> 
-#include <sys/wait.h> 
-#include <unistd.h> 
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define REST_SERVICE_ADDR INADDR_ANY
-#define REST_SERVICE_PORT 80
+#define REST_SERVICE_PORT 8000
 #define CONNECT_QUEUE_LENGTH 10
 
 #define HEADERS "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n"
 #define PREFIX "<HTML>\r\n<HEAD>\r\n<TITLE>Web-Hello</TITLE>\r\n</HEAD>\r\n<BODY>\r\n"
 #define SUFFIX "</BODY>\r\n</HTML>\r\n"
 
+#define DEBUG 1
+
+void debug(char *s) {
+#  if DEBUG
+      printf("%s\n", s);
+      fflush(stdout);
+#  endif
+}
+
 int main(int argc, char *argv[]) {
+
+   debug("web-hello is starting.");
 
    // Create the listening socket
    int listen_fd;
@@ -25,6 +36,7 @@ int main(int argc, char *argv[]) {
       perror("socket");
       exit(1);
    }
+   debug("--> socket created.");
 
    // Bind to specified interface and port
    struct sockaddr_in me = (const struct sockaddr_in){0};
@@ -35,12 +47,14 @@ int main(int argc, char *argv[]) {
       perror("bind");
       exit(1);
    }
+   debug("--> bound to service port.");
 
    // Create service queue, and start listening
    if (listen(listen_fd, CONNECT_QUEUE_LENGTH) == -1) {
       perror("listen");
       exit(1);
    }
+   debug("--> listening...");
 
    const char* env_var = getenv("MY_VAR");
    if (NULL == env_var) { env_var = "(not set)"; }
@@ -60,18 +74,19 @@ int main(int argc, char *argv[]) {
       if (!fork()) {
 
          // This child process handles the connection until done
+         debug("Client has connected...");
 
          // Consume and "log" the request
          const char* client_addr = inet_ntoa(client.sin_addr);
          char request_buffer[BUFSIZ];
          bzero(request_buffer, BUFSIZ);
-         (void) read(client_fd, request_buffer, BUFSIZ); 
-         printf("\nClient %s sent:\n%s", client_addr, request_buffer); 
+         (void) read(client_fd, request_buffer, BUFSIZ);
+         printf("\nClient %s sent:\n%s", client_addr, request_buffer);
 
          // Construct and "log" the response
          char message[BUFSIZ];
          (void) snprintf(message, BUFSIZ, "Hello, \"%s\", on %s\r\n", env_var, client_addr);
-         printf("--> Responding with: %s\n", message); 
+         printf("--> Responding with: %s\n", message);
 
          // Send the response and clean up
          int length = strlen(PREFIX) + strlen(message) + strlen(SUFFIX);
@@ -98,5 +113,3 @@ int main(int argc, char *argv[]) {
       while(waitpid(-1,NULL,WNOHANG) > 0);
    }
 }
-
-
