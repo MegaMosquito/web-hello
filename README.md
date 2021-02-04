@@ -1,2 +1,3 @@
 # web-hello
-Extremely simple HTTP server that responds on port 80 with a hello message.
+
+Extremely simple HTTP server (written in C) that responds on port 8000 with a hello message.
