@@ -1,34 +1,19 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <string.h>
-#include <sys/types.h>
+#include <stdio.h> 
+#include <stdlib.h> 
+#include <errno.h> 
+#include <string.h> 
+#include <sys/types.h> 
 #include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#include <netinet/in.h> 
+#include <sys/socket.h> 
+#include <sys/wait.h> 
+#include <unistd.h> 
 
-#define REST_SERVICE_ADDR INADDR_ANY
-#define REST_SERVICE_PORT 8000
+#define WEB_SERVER_ADDR INADDR_ANY
+#define WEB_SERVER_PORT 8000
 #define CONNECT_QUEUE_LENGTH 10
 
-#define HEADERS "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n"
-#define PREFIX "<HTML>\r\n<HEAD>\r\n<TITLE>Web-Hello</TITLE>\r\n</HEAD>\r\n<BODY>\r\n"
-#define SUFFIX "</BODY>\r\n</HTML>\r\n"
-
-#define DEBUG 1
-
-void debug(char *s) {
-#  if DEBUG
-      printf("%s\n", s);
-      fflush(stdout);
-#  endif
-}
-
 int main(int argc, char *argv[]) {
-
-   debug("web-hello is starting.");
 
    // Create the listening socket
    int listen_fd;
@@ -36,28 +21,22 @@ int main(int argc, char *argv[]) {
       perror("socket");
       exit(1);
    }
-   debug("--> socket created.");
 
    // Bind to specified interface and port
    struct sockaddr_in me = (const struct sockaddr_in){0};
    me.sin_family = AF_INET;
-   me.sin_addr.s_addr = REST_SERVICE_ADDR;
-   me.sin_port = htons(REST_SERVICE_PORT);
+   me.sin_addr.s_addr = WEB_SERVER_ADDR;
+   me.sin_port = htons(WEB_SERVER_PORT);
    if (1 == bind(listen_fd, (struct sockaddr *)&me, sizeof(struct sockaddr))) {
       perror("bind");
       exit(1);
    }
-   debug("--> bound to service port.");
 
    // Create service queue, and start listening
    if (listen(listen_fd, CONNECT_QUEUE_LENGTH) == -1) {
       perror("listen");
       exit(1);
    }
-   debug("--> listening...");
-
-   const char* env_var = getenv("MY_VAR");
-   if (NULL == env_var) { env_var = "(not set)"; }
 
    // Loop forever accepting connections and forking processes to handle them
    while (1) {
@@ -71,35 +50,40 @@ int main(int argc, char *argv[]) {
          continue;
       }
 
+      // This child process handles the connection until done
       if (!fork()) {
-
-         // This child process handles the connection until done
-         debug("Client has connected...");
 
          // Consume and "log" the request
          const char* client_addr = inet_ntoa(client.sin_addr);
          char request_buffer[BUFSIZ];
          bzero(request_buffer, BUFSIZ);
-         (void) read(client_fd, request_buffer, BUFSIZ);
-         printf("\nClient %s sent:\n%s", client_addr, request_buffer);
+         (void) read(client_fd, request_buffer, BUFSIZ); 
+         printf("\nClient %s sent:\n%s", client_addr, request_buffer); 
 
-         // Construct and "log" the response
-         char message[BUFSIZ];
-         (void) snprintf(message, BUFSIZ, "Hello, \"%s\", on %s\r\n", env_var, client_addr);
-         printf("--> Responding with: %s\n", message);
+         // Construct the HTML content
+         char html[BUFSIZ];
+         char *html_template =
+           "<!DOCTYPE html>\r\n"
+           "<html>\r\n<head>\r\n"
+           "<meta charset=\"utf-8\">\r\n"
+           "<title>MiniMosquito</title>\r\n"
+           "</head>\r\n<body>\r\nHello, \"%s\".\r\n</body>\r\n</html>\r\n";
+         (void) snprintf(html, BUFSIZ, html_template, client_addr);
+
+         // Construct the HTTP response, including the HTML content
+         char http[BUFSIZ];
+         char *http_template =
+           "HTTP/1.0 200 OK\r\n"
+           "Content-Type: text/html; charset=utf-8\r\n"
+           "Content-Length: %d\r\n\r\n%s\r\n";
+         (void) snprintf(http, BUFSIZ, http_template, 1 + strlen(html), html);
+
+         // Log the response (for debugging)
+         printf("--> Responding with: \n%s\n", http); 
 
          // Send the response and clean up
-         int length = strlen(PREFIX) + strlen(message) + strlen(SUFFIX);
-         char headers[BUFSIZ];
-         (void) snprintf(headers, BUFSIZ, HEADERS, length);
-         if (-1 == send(client_fd, headers, strlen(headers), 0))
-            perror("send0");
-         if (-1 == send(client_fd, PREFIX, strlen(PREFIX), 0))
-            perror("send1");
-         if (-1 == send(client_fd, message, strlen(message), 0))
-            perror("send2");
-         if (-1 == send(client_fd, SUFFIX, strlen(SUFFIX), 0))
-            perror("send3");
+         if (-1 == send(client_fd, http, 1 + strlen(http), 0))
+            perror("send");
          close(client_fd);
          exit(0);
 

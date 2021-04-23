@@ -1,6 +1,5 @@
-FROM ubuntu:18.04
+FROM ubuntu:latest
 RUN apt update && apt install -y build-essential
-RUN apt install -y curl
 WORKDIR /
 COPY webhello.c /
 RUN gcc webhello.c -o /webhello

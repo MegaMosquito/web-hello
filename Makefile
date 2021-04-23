@@ -1,14 +1,34 @@
-all: run
+# A simple "Hello, world." web server container
 
-build: webhello.c
-	docker build -t ibmosquito/web-hello_amd64:1.0.0 .
+DOCKERHUB_ID:=ibmosquito
+NAME:=webhello
+VERSION:=1.0.0
+PORT:=8000
 
-run: build
-	-docker rm -f web-hello 2>/dev/null
-	docker run -d -p 8000:8000 -e MY_VAR=test --name web-hello ibmosquito/web-hello_amd64:1.0.0
+all: build run
+
+build:
+	docker build -t $(DOCKERHUB_ID)/$(NAME):$(VERSION) .
+
+dev: build stop
+	docker run -it --name $(NAME) -p $(PORT):$(PORT) --volume `pwd`:/outside $(DOCKERHUB_ID)/$(NAME):$(VERSION) /bin/bash
+
+run: stop
+	docker run -d --name $(NAME) -p $(PORT):$(PORT) $(DOCKERHUB_ID)/$(NAME):$(VERSION)
+
+test:
+	curl -sS localhost:$(PORT)/
+
+exec:
+	docker exec -it $(NAME) /bin/bash
 
 push:
-	docker push ibmosquito/web-hello_amd64:1.0.0
+	docker push $(DOCKERHUB_ID)/$(NAME):$(VERSION)
 
-check:
-	curl -sS http://localhost:8000
+stop:
+	-docker rm -f $(NAME) 2>/dev/null || :
+
+clean: stop
+	-docker rmi $(DOCKERHUB_ID)/$(NAME):$(VERSION) 2>/dev/null || :
+
+.PHONY: all build dev run test exec push stop clean
